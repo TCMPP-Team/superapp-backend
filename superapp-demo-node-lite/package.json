@@ -1,0 +1,11 @@
+{
+  "name": "superapp-demo-node-lite",
+  "version": "1.0.0",
+  "description": "SuperApp Demo (Node.js lite): checkUser + HMAC signature verification + body identity decryption (AES-256-GCM)",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,205 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SuperApp checkUser API",
+    "version": "1.0.0",
+    "description": "Called by the SuperApp platform (server-to-server) to check whether a user exists in your system.\n\nThe platform signs every request with HMAC-SHA256 (`TC-Signature`) and encrypts the identity (`openId` / `miniAppId`) in `encryptedData` with AES-256-GCM. See README.md for the full signature and decryption rules.\n\n**Note:** `TC-Signature` depends on the timestamp, path and raw body, so it must be computed for every request. The example values in this document are the README test vectors: they show the format, but the example timestamp is outside the 300-second window, so sending them as-is returns `40102`."
+  },
+  "servers": [
+    {
+      "url": "{scheme}://{host}{basePath}",
+      "description": "Your backend service. Use the console Domain name: host + optional path (basePath).",
+      "variables": {
+        "scheme": { "default": "http", "enum": ["http", "https"] },
+        "host": { "default": "localhost:9093", "description": "Host (and port) of your backend service" },
+        "basePath": { "default": "", "description": "Path part of the console Domain name, e.g. /superapp/inner. Empty if the Domain name has no path." }
+      }
+    }
+  ],
+  "tags": [
+    { "name": "User", "description": "Platform → your server" }
+  ],
+  "paths": {
+    "/user/checkUser": {
+      "post": {
+        "tags": ["User"],
+        "summary": "Check whether a user exists",
+        "description": "Processing order: verify `TC-Signature` → parse body → decrypt `encryptedData` → look up `userId` → persist the `openId + miniAppId ↔ userId` mapping when the user exists.\n\n\"User does not exist\" is a business result (`returnCode` = `\"0\"`, `data` = `false`), not a failure. The HTTP status is always 200; check `returnCode`.",
+        "operationId": "checkUser",
+        "parameters": [
+          {
+            "name": "TC-Signature",
+            "in": "header",
+            "required": true,
+            "description": "lowercase_hex( HMAC-SHA256( SIGN_KEY, StringToSign ) ), 64 lowercase hex chars. StringToSign = \"TC-SIGN-V1:P2S\\n\" + method + \"\\n\" + path + \"\\n\" + canonicalQuery + \"\\n\" + TC-ApplicationID + \"\\n\" + TC-Timestamp + \"\\n\" + lowercase_hex(SHA-256(raw body)) + \"\\n\". The path is the full request path including basePath.",
+            "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "example": "979d739e66a1e2709f855e829f50d146ac825e6c140dbef3a1df4cdbe042f59f"
+          },
+          {
+            "name": "TC-Timestamp",
+            "in": "header",
+            "required": true,
+            "description": "13-digit millisecond timestamp. Must be within SIGNATURE_SKEW_SEC (default 300 seconds) of the server time.",
+            "schema": { "type": "string", "pattern": "^[0-9]{13}$" },
+            "example": "1721234567890"
+          },
+          {
+            "name": "TC-ApplicationID",
+            "in": "header",
+            "required": true,
+            "description": "AppID shown in the console. Part of the signature.",
+            "schema": { "type": "string" },
+            "example": "app-demo001"
+          },
+          {
+            "name": "TC-TraceID",
+            "in": "header",
+            "required": false,
+            "description": "Trace ID, echoed back as `requestId` and in the `TC-TraceID` response header. A random ID is generated if absent.",
+            "schema": { "type": "string" },
+            "example": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Must be signed as raw bytes: do not re-serialize the JSON before computing the body hash.",
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CheckUserRequest" },
+              "example": {
+                "userId": "user-001",
+                "encryptedData": {
+                  "algorithm": "AEAD_AES_256_GCM",
+                  "ciphertext": "VsfUDLx2m8iK5lPRJL+XPJNFdsZ28yvGEqzD1ol0lf7zwWF7GoN4Mr0H1jW0xYJKXKL50zKS+KtGKhkqeXZwTp0zRkyqUHz7FpxuQy1JTZh+LJDU",
+                  "nonce": "AAECAwQFBgcICQoL"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Always HTTP 200; the result is in `returnCode`.",
+            "headers": {
+              "TC-TraceID": {
+                "description": "Same as `requestId`",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CheckUserResponse" },
+                "examples": {
+                  "userExists": {
+                    "summary": "User exists",
+                    "value": { "returnCode": "0", "returnMessage": "OK", "data": true, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "userNotExists": {
+                    "summary": "User does not exist (business result, not a failure)",
+                    "value": { "returnCode": "0", "returnMessage": "OK", "data": false, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "invalidParameter": {
+                    "summary": "40001 Invalid parameter",
+                    "value": { "returnCode": "40001", "returnMessage": "invalid parameter", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "userIdRequired": {
+                    "summary": "40001 Missing userId",
+                    "value": { "returnCode": "40001", "returnMessage": "userId is required", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "signatureFailed": {
+                    "summary": "40101 Signature verification failed",
+                    "value": { "returnCode": "40101", "returnMessage": "signature verification failed", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "decryptFailed": {
+                    "summary": "40101 Identity decryption failed",
+                    "value": { "returnCode": "40101", "returnMessage": "identity decrypt failed", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "timestampExpired": {
+                    "summary": "40102 Timestamp expired",
+                    "value": { "returnCode": "40102", "returnMessage": "timestamp expired", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "serverMisconfigured": {
+                    "summary": "50000 Server misconfigured (SIGN_KEY / DATA_ENCRYPT_KEY)",
+                    "value": { "returnCode": "50000", "returnMessage": "server misconfigured", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  },
+                  "internalError": {
+                    "summary": "50000 Internal error",
+                    "value": { "returnCode": "50000", "returnMessage": "internal error", "data": null, "requestId": "7f3c2a9e1b4d4c0f8a6e5d2c1b0a9f8e" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Path is not `<basePath>/user/checkUser` or method is not POST.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "properties": { "error": { "type": "string" } } },
+                "example": { "error": "not found" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CheckUserRequest": {
+        "type": "object",
+        "required": ["userId"],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Your own user ID (the uid the Super App sets via setAccount).",
+            "example": "user-001"
+          },
+          "encryptedData": { "$ref": "#/components/schemas/EncryptedData" }
+        }
+      },
+      "EncryptedData": {
+        "type": "object",
+        "description": "Encrypted identity. Optional. Plaintext is {\"openId\":\"...\",\"miniAppId\":\"...\"}, encrypted with AES-256-GCM using DATA_ENCRYPT_KEY (32 bytes), no AAD.",
+        "required": ["algorithm", "ciphertext", "nonce"],
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "enum": ["AEAD_AES_256_GCM"],
+            "description": "Protocol identifier; the cipher is standard AES-256-GCM."
+          },
+          "ciphertext": {
+            "type": "string",
+            "format": "byte",
+            "description": "Standard Base64 of (ciphertext || 16-byte GCM tag).",
+            "example": "VsfUDLx2m8iK5lPRJL+XPJNFdsZ28yvGEqzD1ol0lf7zwWF7GoN4Mr0H1jW0xYJKXKL50zKS+KtGKhkqeXZwTp0zRkyqUHz7FpxuQy1JTZh+LJDU"
+          },
+          "nonce": {
+            "type": "string",
+            "format": "byte",
+            "description": "Standard Base64 of the 12-byte random nonce (IV).",
+            "example": "AAECAwQFBgcICQoL"
+          }
+        }
+      },
+      "CheckUserResponse": {
+        "type": "object",
+        "required": ["returnCode", "returnMessage", "data", "requestId"],
+        "properties": {
+          "returnCode": {
+            "type": "string",
+            "enum": ["0", "40001", "40101", "40102", "50000"],
+            "description": "0 success; 40001 invalid parameter / missing userId; 40101 signature invalid / identity decryption failed; 40102 timestamp expired; 50000 server misconfigured / internal error."
+          },
+          "returnMessage": { "type": "string", "example": "OK" },
+          "data": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "true: user exists; false: user does not exist; null: request failed (returnCode != 0)."
+          },
+          "requestId": { "type": "string", "description": "Echoes TC-TraceID." }
+        }
+      }
+    }
+  }
+}
