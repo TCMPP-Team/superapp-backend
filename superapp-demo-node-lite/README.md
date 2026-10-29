@@ -48,8 +48,8 @@ At startup the server prints a warning if `SIGN_KEY` or `DATA_ENCRYPT_KEY` is mi
 
 | Environment variable | Description |
 |---|---|
-| `SIGN_KEY` | HMAC signing key, 32–255 bytes (console: **Signing key**) |
-| `DATA_ENCRYPT_KEY` | AES-256-GCM data key, exactly 32 bytes (console: **Data encryption key**) |
+| `SIGN_KEY` | HMAC signing key, 16–64 characters (console: **Signing key**) |
+| `DATA_ENCRYPT_KEY` | AES-256-GCM data key, exactly 32 characters (console: **Data encryption key**) |
 | `APPLICATION_ID` | Optional, pins `TC-ApplicationID` (console: **AppID**) |
 | `BASE_PATH` | Optional, the path part of the console **Domain name** (see [Request Path](#request-path)). Default empty: serves `/user/checkUser` |
 | `SIGNATURE_SKEW_SEC` | Timestamp window in seconds, default 300 |
@@ -62,18 +62,18 @@ In the console, go to **Configuration management → Backend service configurati
 | Console field | Used as | Notes |
 |---|---|---|
 | AppID | `TC-ApplicationID` header / `APPLICATION_ID` | Shown by the console, e.g. `app-xxxxxxxx`. It is part of the signature (line 5 of StringToSign). |
-| Signing key | `SIGN_KEY` | Entered by you. HMAC-SHA256 key, 32–255 bytes. |
-| Data encryption key | `DATA_ENCRYPT_KEY` | Entered by you. AES-256-GCM key, exactly 32 bytes. |
+| Signing key | `SIGN_KEY` | Entered by you. HMAC-SHA256 key, 16–64 characters, letters / digits / symbols only. |
+| Data encryption key | `DATA_ENCRYPT_KEY` | Entered by you. AES-256-GCM key, exactly 32 characters, letters / digits / symbols only. |
 | Domain name | Where the platform sends `POST <Domain name>/user/checkUser` | May include a path, see [Request Path](#request-path). |
 
 Both keys are chosen by you, so generate them randomly and configure the **same values** in the console and on your server. For example:
 
 ```bash
-openssl rand -hex 32   # Signing key: 64 hex chars = 64 bytes
-openssl rand -hex 16   # Data encryption key: 32 hex chars = 32 bytes
+openssl rand -hex 24   # Signing key: 48 characters (16–64)
+openssl rand -hex 16   # Data encryption key: 32 characters
 ```
 
-The keys are used as their UTF-8 bytes, so a 32-character ASCII string is exactly 32 bytes. Avoid non-ASCII characters.
+Both keys may only contain letters, digits and symbols (ASCII). An ASCII character is one byte in UTF-8, so the character count is the byte count: 16–64 characters = 16–64 bytes, and a 32-character `DATA_ENCRYPT_KEY` is exactly the 32 bytes AES-256-GCM requires.
 
 ## Request Path
 
@@ -248,7 +248,7 @@ The last 16 bytes of the decoded `ciphertext` are the GCM tag; the rest is the c
 
 **Step 4: AES-256-GCM decrypt**
 
-- key: `DATA_ENCRYPT_KEY` (32 bytes)
+- key: `DATA_ENCRYPT_KEY` (32 characters)
 - iv: the decoded `nonce`
 - tag: the 16 bytes from step 3
 - **No AAD** (not passing it, `nil`, an empty string, or a zero-length byte array all give the same result; passing any non-empty AAD will fail authentication)
@@ -309,7 +309,7 @@ Full implementation (with input validation) in `src/identityCrypto.js`. Any decr
 | `40102` | Clock skew exceeds the window, or the timestamp is not 13-digit milliseconds |
 | Signature fails when the query contains `+` | `+` is a literal plus, not a space; it must be encoded as `%2B` |
 | `40101 identity decrypt failed` | `DATA_ENCRYPT_KEY` differs from the one in the console, or `algorithm` is not `AEAD_AES_256_GCM` |
-| `50000 server misconfigured` | `SIGN_KEY` is not 32–255 bytes, or `DATA_ENCRYPT_KEY` is not exactly 32 bytes; check the startup warnings |
+| `50000 server misconfigured` | `SIGN_KEY` is not 16–64 characters, or `DATA_ENCRYPT_KEY` is not exactly 32 characters; check the startup warnings |
 
 ## API Spec (checkUser.json)
 

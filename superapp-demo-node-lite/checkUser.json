@@ -160,7 +160,7 @@
       },
       "EncryptedData": {
         "type": "object",
-        "description": "Encrypted identity. Optional. Plaintext is {\"openId\":\"...\",\"miniAppId\":\"...\"}, encrypted with AES-256-GCM using DATA_ENCRYPT_KEY (32 bytes), no AAD.",
+        "description": "Encrypted identity. Optional. Plaintext is {\"openId\":\"...\",\"miniAppId\":\"...\"}, encrypted with AES-256-GCM using DATA_ENCRYPT_KEY (32 characters), no AAD.",
         "required": ["algorithm", "ciphertext", "nonce"],
         "properties": {
           "algorithm": {

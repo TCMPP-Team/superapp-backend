@@ -137,8 +137,8 @@ export function verifyRequest(req, rawBody, cfg) {
   checkTimestamp(timestamp, cfg.skewSec);
 
   // 2. our configuration must be valid, otherwise fail closed
-  const signKeyBytes = Buffer.byteLength(cfg.signKey || '', 'utf8');
-  if (signKeyBytes < 32 || signKeyBytes > 255) {
+  const signKeyChars = [...(cfg.signKey || '')].length;   // console accepts 16-64 characters
+  if (signKeyChars < 16 || signKeyChars > 64) {
     throw new SignError(SERVER_ERROR, 'sign key not configured');
   }
   if (cfg.applicationId && applicationId !== cfg.applicationId) throw new SignError(SIGN_INVALID, 'application mismatch');

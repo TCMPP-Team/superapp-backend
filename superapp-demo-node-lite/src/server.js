@@ -29,10 +29,10 @@ export function loadConfig(env = process.env) {
   return {
     port: Number(env.PORT || 9093),
     basePath: normalizeBasePath(env.BASE_PATH),   // path part of the console Domain name, e.g. /superapp/inner
-    signKey: env.SIGN_KEY || undefined,            // HMAC secret, 32-255 bytes
+    signKey: env.SIGN_KEY || undefined,            // HMAC secret, 16-64 characters
     applicationId: env.APPLICATION_ID || '',       // optional: pin TC-ApplicationID
     skewSec: Number(env.SIGNATURE_SKEW_SEC || 300),
-    dataEncryptKey: key(env.DATA_ENCRYPT_KEY),     // 32 bytes, AEAD_AES_256_GCM (standard AES-256-GCM)
+    dataEncryptKey: key(env.DATA_ENCRYPT_KEY),     // 32 characters, AEAD_AES_256_GCM (standard AES-256-GCM)
     users: new Set((env.USERS || 'demo-user-001,demo-user-002').split(',').map((s) => s.trim()).filter(Boolean)),
   };
 }
@@ -95,7 +95,7 @@ async function handleRequest(req, res, requestId, cfg, userStore) {
 
   // 3. decrypt body.encryptedData when present (fail closed on any error)
   if (body.encryptedData != null && cfg.dataEncryptKey?.length !== 32) {
-    console.error(`checkUser: DATA_ENCRYPT_KEY is not configured or not 32 bytes trace=${requestId}`);
+    console.error(`checkUser: DATA_ENCRYPT_KEY is not configured or not 32 characters trace=${requestId}`);
     return reply(res, requestId, SERVER_ERROR, 'server misconfigured');
   }
   let identity = null;
@@ -129,8 +129,8 @@ async function handleRequest(req, res, requestId, cfg, userStore) {
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const cfg = loadConfig();
   // Warn early: a missing / invalid key makes every request fail with 50000
-  const signKeyBytes = Buffer.byteLength(cfg.signKey || '', 'utf8');
-  if (signKeyBytes < 32 || signKeyBytes > 255) console.warn('WARNING: SIGN_KEY must be 32-255 bytes; all requests will return 50000');
-  if (cfg.dataEncryptKey?.length !== 32) console.warn('WARNING: DATA_ENCRYPT_KEY must be exactly 32 bytes; requests with encryptedData will return 50000');
+  const signKeyChars = [...(cfg.signKey || '')].length;
+  if (signKeyChars < 16 || signKeyChars > 64) console.warn('WARNING: SIGN_KEY must be 16-64 characters; all requests will return 50000');
+  if (cfg.dataEncryptKey?.length !== 32) console.warn('WARNING: DATA_ENCRYPT_KEY must be exactly 32 characters; requests with encryptedData will return 50000');
   createServer(cfg).listen(cfg.port, () => console.log(`superapp-demo-node-lite listening on :${cfg.port}, POST ${cfg.basePath}/user/checkUser`));
 }

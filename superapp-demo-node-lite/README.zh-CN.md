@@ -48,8 +48,8 @@ npm start
 
 | 环境变量 | 说明 |
 |---|---|
-| `SIGN_KEY` | HMAC 签名密钥，32–255 字节（控制台：**Signing key**） |
-| `DATA_ENCRYPT_KEY` | AES-256-GCM 数据密钥，必须为 32 字节（控制台：**Data encryption key**） |
+| `SIGN_KEY` | HMAC 签名密钥，16–64 字符（控制台：**Signing key**） |
+| `DATA_ENCRYPT_KEY` | AES-256-GCM 数据密钥，必须为 32 字符（控制台：**Data encryption key**） |
 | `APPLICATION_ID` | 可选，校验 `TC-ApplicationID`（控制台：**AppID**） |
 | `BASE_PATH` | 可选，控制台 **Domain name** 中的路径部分（见[请求路径](#请求路径)）。默认为空，即响应 `/user/checkUser` |
 | `SIGNATURE_SKEW_SEC` | 时间戳窗口（秒），默认 300 |
@@ -62,18 +62,18 @@ npm start
 | 控制台字段 | 对应 | 说明 |
 |---|---|---|
 | AppID | 请求头 `TC-ApplicationID` / `APPLICATION_ID` | 由控制台展示，如 `app-xxxxxxxx`，参与签名（StringToSign 第 5 行）。 |
-| Signing key | `SIGN_KEY` | 由你填写。HMAC-SHA256 密钥，32–255 字节。 |
-| Data encryption key | `DATA_ENCRYPT_KEY` | 由你填写。AES-256-GCM 密钥，必须为 32 字节。 |
+| Signing key | `SIGN_KEY` | 由你填写。HMAC-SHA256 密钥，16–64 字符，仅英文、数字、符号。 |
+| Data encryption key | `DATA_ENCRYPT_KEY` | 由你填写。AES-256-GCM 密钥，必须为 32 字符，仅英文、数字、符号。 |
 | Domain name | 平台请求 `POST <Domain name>/user/checkUser` | 可以带路径，见[请求路径](#请求路径)。 |
 
 两个密钥都由你自己生成，请随机生成，并在控制台和你的服务端配置**相同的值**。例如：
 
 ```bash
-openssl rand -hex 32   # Signing key：64 个 hex 字符 = 64 字节
-openssl rand -hex 16   # Data encryption key：32 个 hex 字符 = 32 字节
+openssl rand -hex 24   # Signing key：48 个字符（16–64 字符）
+openssl rand -hex 16   # Data encryption key：32 个字符
 ```
 
-密钥按 UTF-8 字节使用，32 个 ASCII 字符正好是 32 字节。请避免使用非 ASCII 字符。
+两个密钥都只能包含英文、数字和符号（ASCII）。ASCII 字符在 UTF-8 下 1 个字符 = 1 个字节，所以字符数就是字节数：16–64 字符 = 16–64 字节，`DATA_ENCRYPT_KEY` 的 32 字符正好是 AES-256-GCM 要求的 32 字节。
 
 ## 请求路径
 
@@ -248,7 +248,7 @@ function sign({ secret, method, path, canonicalQuery, applicationId, timestamp, 
 
 **第 4 步：AES-256-GCM 解密**
 
-- key：`DATA_ENCRYPT_KEY`（32 字节）
+- key：`DATA_ENCRYPT_KEY`（32 字符）
 - iv：解码后的 `nonce`
 - tag：第 3 步的 16 字节
 - **不使用 AAD**（不传、`nil`、空串、长度为 0 的字节数组结果一致；传任何非空 AAD 都会认证失败）
@@ -309,7 +309,7 @@ function decryptEncryptedData(env, key /* 32 字节 Buffer */) {
 | `40102` | 时钟偏差超过窗口，或时间戳不是 13 位毫秒 |
 | query 含 `+` 时验签失败 | `+` 是字面量，不是空格，应编码为 `%2B` |
 | `40101 identity decrypt failed` | `DATA_ENCRYPT_KEY` 与控制台中的不一致，或 `algorithm` 不是 `AEAD_AES_256_GCM` |
-| `50000 server misconfigured` | `SIGN_KEY` 不是 32–255 字节，或 `DATA_ENCRYPT_KEY` 不是 32 字节；请查看启动时的警告 |
+| `50000 server misconfigured` | `SIGN_KEY` 不是 16–64 字符，或 `DATA_ENCRYPT_KEY` 不是 32 字符；请查看启动时的警告 |
 
 ## 接口文档（checkUser.json）
 
